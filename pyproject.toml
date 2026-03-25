@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "turboquant"
 version = "0.1.0"
-description = "TurboQuant KV cache compression for LLM inference. First open-source implementation."
+description = "TurboQuant KV cache compression for LLM inference. Open-source pip-installable implementation for HuggingFace models."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"

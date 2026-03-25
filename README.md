@@ -1,6 +1,6 @@
 # TurboQuant
 
-First open-source implementation of Google's TurboQuant KV cache compression.
+Open-source implementation of Google's TurboQuant KV cache compression.
 
 Compress your LLM's KV cache to 4 bits. Save VRAM. Run longer contexts. Drop-in for HuggingFace.
 

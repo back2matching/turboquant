@@ -143,6 +143,13 @@ The rotation is computed once (not per-token) and the codebook is derived analyt
 
 TurboQuant is the only pip-installable sub-8-bit KV cache compression that works with any HuggingFace model.
 
+## llama.cpp Integration
+
+TurboQuant is also available as a KV cache type in llama.cpp:
+- **PR:** [ggml-org/llama.cpp#20995](https://github.com/ggml-org/llama.cpp/pull/20995)
+- **Usage:** `--cache-type-k tq4_0 --cache-type-v f16 --no-kv-offload`
+- **Result:** 70% less perplexity degradation than Q4_0 at the same VRAM
+
 ## Paper
 
 This implements the algorithm from:

@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "turboquant"
+version = "0.1.0"
+description = "TurboQuant KV cache compression for LLM inference. First open-source implementation."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "back2matching"},
+]
+keywords = ["llm", "kv-cache", "quantization", "inference", "turboquant", "transformers"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=2.2.0",
+    "transformers>=4.40.0",
+    "scipy>=1.10.0",
+    "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+server = ["uvicorn", "fastapi"]
+dev = ["pytest", "pytest-benchmark"]
+
+[project.urls]
+Homepage = "https://github.com/back2matching/turboquant"
+Issues = "https://github.com/back2matching/turboquant/issues"
+
+[project.scripts]
+turboquant-server = "turboquant.server:main"
+
+[tool.setuptools.packages.find]
+include = ["turboquant*"]

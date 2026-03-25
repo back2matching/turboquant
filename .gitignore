@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.pytest_cache/

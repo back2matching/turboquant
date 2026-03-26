@@ -167,7 +167,42 @@ def benchmark_turboquant(model, tokenizer, prompt: str, max_new_tokens: int, con
     )
 
 
-def run_benchmarks(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct", quick: bool = False):
+def make_prompt(tokenizer, target_tokens: int) -> str:
+    """Build a prompt that tokenizes to approximately target_tokens."""
+    question = "\n\nWrite a function to check if a number is prime in Python. Include docstring and examples."
+    filler = "The quick brown fox jumps over the lazy dog. "
+    q_len = len(tokenizer.encode(question))
+    filler_len = len(tokenizer.encode(filler))
+    repeats = max(1, (target_tokens - q_len) // filler_len)
+    return filler * repeats + question
+
+
+def run_single_context(model, tokenizer, context_length: int, max_tokens: int, results: list):
+    """Run FP16, TQ-4bit, TQ-3bit for a single context length."""
+    prompt = make_prompt(tokenizer, context_length)
+
+    print(f"\n{'='*60}")
+    print(f"Context target: {context_length} tokens")
+    print(f"{'='*60}")
+
+    for mode_name, run_fn in [
+        ("FP16 baseline", lambda: benchmark_fp16(model, tokenizer, prompt, max_tokens, context_length)),
+        ("TurboQuant 4-bit", lambda: benchmark_turboquant(model, tokenizer, prompt, max_tokens, context_length, bits=4)),
+        ("TurboQuant 3-bit", lambda: benchmark_turboquant(model, tokenizer, prompt, max_tokens, context_length, bits=3)),
+    ]:
+        print(f"\n[{mode_name}]")
+        try:
+            r = run_fn()
+            results.append(r)
+            print(f"  VRAM peak: {r.vram_peak_mb:.0f} MB, KV est: {r.vram_kv_estimate_mb:.0f} MB")
+            print(f"  Speed: {r.tokens_per_sec:.1f} tok/s, Prefill: {r.prefill_time_s:.3f}s")
+            print(f"  Output: {r.output_text[:100]}...")
+        except Exception as e:
+            print(f"  ERROR: {e}")
+
+
+def run_benchmarks(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct", quick: bool = False,
+                   context_lengths: list = None):
     """Run full benchmark suite."""
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -181,59 +216,34 @@ def run_benchmarks(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct", quick: bool =
     )
     print(f"Model loaded. VRAM: {gpu_mem_mb():.0f} MB")
 
-    # Test prompts
-    short_prompt = "Write a function to check if a number is prime in Python."
-    long_prompt = "You are an expert software engineer. " * 200 + "\n\nNow write a detailed analysis of the following code:\n\n```python\ndef fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n```\n\nAnalyze time complexity, space complexity, and suggest optimizations."
-
     max_tokens = 50 if quick else 100
     results = []
 
-    for prompt_name, prompt, ctx_len in [
-        ("short", short_prompt, 512),
-        ("long", long_prompt, 2048 if not quick else 512),
-    ]:
-        print(f"\n{'='*60}")
-        print(f"Prompt: {prompt_name} ({ctx_len} max context)")
-        print(f"{'='*60}")
+    if context_lengths is None:
+        context_lengths = [512] if quick else [512, 2048]
 
-        # FP16 baseline
-        print("\n[FP16 baseline]")
-        try:
-            r = benchmark_fp16(model, tokenizer, prompt, max_tokens, ctx_len)
-            results.append(r)
-            print(f"  VRAM peak: {r.vram_peak_mb:.0f} MB, KV est: {r.vram_kv_estimate_mb:.0f} MB")
-            print(f"  Speed: {r.tokens_per_sec:.1f} tok/s, Prefill: {r.prefill_time_s:.3f}s")
-            print(f"  Output: {r.output_text[:100]}...")
-        except Exception as e:
-            print(f"  ERROR: {e}")
+    for ctx_len in context_lengths:
+        run_single_context(model, tokenizer, ctx_len, max_tokens, results)
 
-        # TurboQuant 4-bit
-        print("\n[TurboQuant 4-bit]")
-        try:
-            r = benchmark_turboquant(model, tokenizer, prompt, max_tokens, ctx_len, bits=4)
-            results.append(r)
-            print(f"  VRAM peak: {r.vram_peak_mb:.0f} MB, KV est: {r.vram_kv_estimate_mb:.0f} MB")
-            print(f"  Speed: {r.tokens_per_sec:.1f} tok/s, Prefill: {r.prefill_time_s:.3f}s")
-            print(f"  Output: {r.output_text[:100]}...")
-        except Exception as e:
-            print(f"  ERROR: {e}")
-
-        # TurboQuant 3-bit
-        print("\n[TurboQuant 3-bit]")
-        try:
-            r = benchmark_turboquant(model, tokenizer, prompt, max_tokens, ctx_len, bits=3)
-            results.append(r)
-            print(f"  VRAM peak: {r.vram_peak_mb:.0f} MB, KV est: {r.vram_kv_estimate_mb:.0f} MB")
-            print(f"  Speed: {r.tokens_per_sec:.1f} tok/s, Prefill: {r.prefill_time_s:.3f}s")
-            print(f"  Output: {r.output_text[:100]}...")
-        except Exception as e:
-            print(f"  ERROR: {e}")
-
-    # Save results
-    output_path = Path(__file__).parent / "benchmark_results.json"
+    # Save results per model
+    model_slug = model_name.split("/")[-1].lower()
+    output_path = Path(__file__).parent / f"results_{model_slug}.json"
     with open(output_path, 'w') as f:
         json.dump([asdict(r) for r in results], f, indent=2)
     print(f"\nResults saved to {output_path}")
+
+    # Also append to combined results file
+    combined_path = Path(__file__).parent / "benchmark_results.json"
+    existing = []
+    if combined_path.exists():
+        with open(combined_path) as f:
+            existing = json.load(f)
+    # Remove old results for this model
+    existing = [r for r in existing if r.get('model') != model_name]
+    existing.extend([asdict(r) for r in results])
+    with open(combined_path, 'w') as f:
+        json.dump(existing, f, indent=2)
+    print(f"Combined results updated: {combined_path}")
 
     # Summary table
     print(f"\n{'='*80}")
@@ -249,6 +259,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', default='Qwen/Qwen2.5-0.5B-Instruct')
     parser.add_argument('--quick', action='store_true')
+    parser.add_argument('--context', type=str, default=None,
+                        help='Comma-separated context lengths, e.g. "512,1024,2048,4096"')
     args = parser.parse_args()
 
-    run_benchmarks(model_name=args.model, quick=args.quick)
+    ctx = None
+    if args.context:
+        ctx = [int(x.strip()) for x in args.context.split(',')]
+
+    run_benchmarks(model_name=args.model, quick=args.quick, context_lengths=ctx)

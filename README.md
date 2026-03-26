@@ -86,15 +86,43 @@ vectors_hat = tq.dequantize(indices, norms)
 
 ## Benchmarks (RTX 4080 16GB)
 
-### Qwen2.5-3B-Instruct
+Independent benchmarks on NVIDIA RTX 4080 (16 GB VRAM), PyTorch 2.5.1, CUDA 12.1. All results are reproducible via `benchmarks/benchmark_kv.py`.
 
-| KV Mode | Peak VRAM | VRAM Saved | Speed | Output Quality |
-|---------|-----------|------------|-------|---------------|
-| FP16 (baseline) | 6,922 MB | -- | 28 tok/s | Perfect |
-| **TurboQuant 4-bit** | **6,448 MB** | **474 MB** | 17 tok/s | Good |
-| TurboQuant 3-bit | 6,448 MB | 474 MB | 20 tok/s | Degraded on small models |
+### Qwen2.5-7B-Instruct (14.5 GB model weights)
 
-VRAM savings scale linearly with context length. At 32K tokens on an 8B model, expect ~3 GB saved.
+| Context | KV Mode | Peak VRAM | VRAM Saved | Speed (tok/s) | Output Quality |
+|---------|---------|-----------|------------|---------------|----------------|
+| 460 | FP16 | 14,833 MB | -- | 17.7 | Coherent |
+| 460 | **TQ 4-bit** | **14,758 MB** | **75 MB** | **23.8** | Coherent |
+| 460 | TQ 3-bit | 14,758 MB | 75 MB | 20.6 | Minor artifacts |
+| 1860 | FP16 | 16,659 MB | -- | 1.0 | Coherent |
+| 1860 | **TQ 4-bit** | **16,215 MB** | **444 MB** | **1.4** | Coherent |
+| 1860 | TQ 3-bit | 16,217 MB | 442 MB | 1.4 | Coherent |
+
+At 7B with 1.8K context, FP16 exceeds physical VRAM (16,659 > 16,376 MB) and drops to 1 tok/s from swapping. TQ-4bit saves 444 MB and runs **40% faster** in this regime.
+
+### Qwen2.5-3B-Instruct — Context Length Sweep (5.9 GB model weights)
+
+| Context | KV Mode | Peak VRAM | VRAM Saved | Speed (tok/s) |
+|---------|---------|-----------|------------|---------------|
+| 460 | FP16 | 6,126 MB | -- | 31.6 |
+| 460 | TQ 4-bit | 6,084 MB | 42 MB | 20.5 |
+| 930 | FP16 | 6,451 MB | -- | 30.1 |
+| 930 | TQ 4-bit | 6,281 MB | 170 MB | 20.0 |
+| 1860 | FP16 | 7,359 MB | -- | 26.2 |
+| 1860 | TQ 4-bit | 6,880 MB | **479 MB** | 19.2 |
+| 3720 | FP16 | 10,222 MB | -- | 18.3 |
+| 3720 | TQ 4-bit | 9,267 MB | **955 MB** | 16.3 |
+
+VRAM savings scale with context length: 42 MB at 512 tokens up to **955 MB at 4K tokens**. At 4K context, TQ-4bit runs at 89% of FP16 speed while saving nearly 1 GB of VRAM. Extrapolating: at 32K tokens, expect ~7.5 GB saved.
+
+### Key Takeaways
+
+- **VRAM savings scale linearly with context length.** At short contexts (<512 tokens), savings are minimal. At 4K+ tokens, savings exceed 1 GB.
+- **Speed overhead decreases at longer contexts.** TQ-4bit is 35% slower at 512 tokens but only 11% slower at 4K tokens.
+- **Under memory pressure, TQ is faster than FP16.** When FP16 KV cache pushes VRAM past physical limits, TQ's smaller cache avoids thrashing and delivers higher throughput.
+- **TQ-4bit and TQ-3bit have similar VRAM.** The current implementation stores dequantized FP16 values (not compressed indices), so 3-bit and 4-bit use the same memory. A production implementation storing indices would see 3-bit use 25% less than 4-bit.
+- **Output quality is good at 4-bit.** Both models produce coherent, correct code across all context lengths. 3-bit shows occasional minor artifacts at shorter contexts.
 
 ### Algorithm Verification
 

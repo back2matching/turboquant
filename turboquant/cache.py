@@ -33,16 +33,22 @@ class TurboQuantLayer(DynamicLayer):
         super().__init__()
         self.bits = bits
         self.residual_len = residual_len
-        self._quantized_keys: Optional[torch.Tensor] = None
-        self._quantized_values: Optional[torch.Tensor] = None
+        self._key_indices: Optional[torch.Tensor] = None
+        self._key_norms: Optional[torch.Tensor] = None
+        self._value_indices: Optional[torch.Tensor] = None
+        self._value_norms: Optional[torch.Tensor] = None
         self._residual_keys: Optional[torch.Tensor] = None
         self._residual_values: Optional[torch.Tensor] = None
         self._total_len = 0
+        self._head_dim: Optional[int] = None
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
-        self._quantized_keys = torch.tensor([], dtype=self.dtype, device=self.device)
-        self._quantized_values = torch.tensor([], dtype=self.dtype, device=self.device)
+        self._head_dim = key_states.shape[-1]
+        self._key_indices = torch.tensor([], dtype=torch.uint8, device=self.device)
+        self._key_norms = torch.tensor([], dtype=torch.float32, device=self.device)
+        self._value_indices = torch.tensor([], dtype=torch.uint8, device=self.device)
+        self._value_norms = torch.tensor([], dtype=torch.float32, device=self.device)
         self._residual_keys = torch.tensor([], dtype=self.dtype, device=self.device)
         self._residual_values = torch.tensor([], dtype=self.dtype, device=self.device)
         # Parent class expects these
@@ -76,31 +82,72 @@ class TurboQuantLayer(DynamicLayer):
             device = str(key_states.device)
             quantizer = _get_quantizer(head_dim, self.bits, device)
 
-            # Quantize + dequantize (lossy roundtrip)
+            # Quantize and store compressed indices + norms
             k_flat = to_quantize_k.reshape(-1, head_dim)
             k_idx, k_norms = quantizer.quantize(k_flat)
-            k_deq = quantizer.dequantize(k_idx, k_norms).reshape(to_quantize_k.shape).to(dtype=self.dtype, device=self.device)
 
             v_flat = to_quantize_v.reshape(-1, head_dim)
             v_idx, v_norms = quantizer.quantize(v_flat)
-            v_deq = quantizer.dequantize(v_idx, v_norms).reshape(to_quantize_v.shape).to(dtype=self.dtype, device=self.device)
 
-            # Move quantized data to the quantized buffer
-            self._quantized_keys = torch.cat([self._quantized_keys, k_deq], dim=-2)
-            self._quantized_values = torch.cat([self._quantized_values, v_deq], dim=-2)
+            # Store raw indices (uint8) and norms (float32) — NOT dequantized FP16
+            k_idx = k_idx.reshape(to_quantize_k.shape)
+            k_norms = k_norms.reshape(to_quantize_k.shape[:-1] + (1,))
+            v_idx = v_idx.reshape(to_quantize_v.shape)
+            v_norms = v_norms.reshape(to_quantize_v.shape[:-1] + (1,))
+
+            self._key_indices = torch.cat([self._key_indices, k_idx], dim=-2) if self._key_indices.numel() > 0 else k_idx
+            self._key_norms = torch.cat([self._key_norms, k_norms], dim=-2) if self._key_norms.numel() > 0 else k_norms
+            self._value_indices = torch.cat([self._value_indices, v_idx], dim=-2) if self._value_indices.numel() > 0 else v_idx
+            self._value_norms = torch.cat([self._value_norms, v_norms], dim=-2) if self._value_norms.numel() > 0 else v_norms
 
             # Trim residual window
             self._residual_keys = self._residual_keys[..., overflow:, :]
             self._residual_values = self._residual_values[..., overflow:, :]
 
-        # Build full view: quantized (old) + residual (recent FP16)
-        self.keys = torch.cat([self._quantized_keys, self._residual_keys], dim=-2) if self._quantized_keys.numel() > 0 else self._residual_keys
-        self.values = torch.cat([self._quantized_values, self._residual_values], dim=-2) if self._quantized_values.numel() > 0 else self._residual_values
+        # Build full view: dequantize compressed (old) + residual (recent FP16)
+        if self._key_indices.numel() > 0:
+            quantizer = _get_quantizer(self._head_dim, self.bits, str(self.device))
+            k_deq = quantizer.dequantize(
+                self._key_indices.reshape(-1, self._head_dim),
+                self._key_norms.reshape(-1, 1),
+            ).reshape(self._key_indices.shape).to(dtype=self.dtype)
+            v_deq = quantizer.dequantize(
+                self._value_indices.reshape(-1, self._head_dim),
+                self._value_norms.reshape(-1, 1),
+            ).reshape(self._value_indices.shape).to(dtype=self.dtype)
+            self.keys = torch.cat([k_deq, self._residual_keys], dim=-2)
+            self.values = torch.cat([v_deq, self._residual_values], dim=-2)
+        else:
+            self.keys = self._residual_keys
+            self.values = self._residual_values
 
         return self.keys, self.values
 
     def get_seq_length(self) -> int:
         return self._total_len
+
+    def memory_usage_bytes(self) -> dict:
+        """Report actual memory usage: compressed vs FP16-equivalent."""
+        compressed = 0
+        fp16_equivalent = 0
+        if self._key_indices is not None and self._key_indices.numel() > 0:
+            compressed += self._key_indices.nelement() * self._key_indices.element_size()
+            compressed += self._key_norms.nelement() * self._key_norms.element_size()
+            compressed += self._value_indices.nelement() * self._value_indices.element_size()
+            compressed += self._value_norms.nelement() * self._value_norms.element_size()
+            # FP16 equivalent: same number of elements as indices, but at 2 bytes each, for both K and V
+            fp16_equivalent += self._key_indices.nelement() * 2 + self._value_indices.nelement() * 2
+        residual = 0
+        if self._residual_keys is not None and self._residual_keys.numel() > 0:
+            residual += self._residual_keys.nelement() * self._residual_keys.element_size()
+            residual += self._residual_values.nelement() * self._residual_values.element_size()
+        return {
+            "compressed_bytes": compressed,
+            "residual_bytes": residual,
+            "total_bytes": compressed + residual,
+            "fp16_equivalent_bytes": fp16_equivalent + residual,
+            "savings_ratio": (fp16_equivalent + residual) / max(compressed + residual, 1),
+        }
 
 
 class TurboQuantCache(DynamicCache):
@@ -129,6 +176,17 @@ class TurboQuantCache(DynamicCache):
 
         keys, values = self.layers[layer_idx].update(key_states, value_states, cache_kwargs)
         return keys, values
+
+    def memory_usage_bytes(self) -> dict:
+        """Aggregate memory usage across all layers."""
+        totals = {"compressed_bytes": 0, "residual_bytes": 0, "total_bytes": 0, "fp16_equivalent_bytes": 0}
+        for layer in self.layers:
+            if hasattr(layer, 'memory_usage_bytes'):
+                stats = layer.memory_usage_bytes()
+                for k in totals:
+                    totals[k] += stats[k]
+        totals["savings_ratio"] = totals["fp16_equivalent_bytes"] / max(totals["total_bytes"], 1)
+        return totals
 
 
 if __name__ == '__main__':

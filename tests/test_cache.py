@@ -61,3 +61,33 @@ class TestTurboQuantCache:
             v = torch.randn(1, 4, 200, 128, device=device)
             full_k, full_v = cache.update(k, v, layer_idx=0)
             assert full_k.shape == (1, 4, 200, 128)
+
+    def test_compressed_index_storage(self, device):
+        """Verify internal storage uses uint8 indices, not dequantized FP16."""
+        cache = TurboQuantCache(bits=4)
+        # 256 tokens: 128 will overflow residual and get compressed
+        k = torch.randn(1, 4, 256, 128, device=device, dtype=torch.float16)
+        v = torch.randn(1, 4, 256, 128, device=device, dtype=torch.float16)
+        cache.update(k, v, layer_idx=0)
+
+        layer = cache.layers[0]
+        # Indices should be uint8
+        assert layer._key_indices.dtype == torch.uint8
+        assert layer._value_indices.dtype == torch.uint8
+        # Norms should be float32
+        assert layer._key_norms.dtype == torch.float32
+        # 128 tokens should be in compressed buffer (256 - 128 residual)
+        assert layer._key_indices.shape[-2] == 128
+        assert layer._residual_keys.shape[-2] == 128
+
+    def test_memory_usage_bytes(self, device):
+        """Verify compressed storage uses less memory than FP16 equivalent."""
+        cache = TurboQuantCache(bits=4)
+        k = torch.randn(1, 4, 512, 128, device=device)
+        v = torch.randn(1, 4, 512, 128, device=device)
+        cache.update(k, v, layer_idx=0)
+
+        stats = cache.memory_usage_bytes()
+        assert stats["compressed_bytes"] > 0
+        assert stats["total_bytes"] < stats["fp16_equivalent_bytes"]
+        assert stats["savings_ratio"] > 1.0

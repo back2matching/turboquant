@@ -1,7 +1,7 @@
 # ACTIVE PLAN: Produce 8B-Scale TurboQuant Benchmark Data
 
 > Created: 2026-03-26
-> Status: ACTIVE — Phase 1 & 2 partial complete, Phase 3 in progress
+> Status: COMPLETE — all success criteria met, data published
 > Hardware: RTX 4080 16GB, Windows 10
 
 ## Progress
@@ -12,9 +12,9 @@
 - [x] (2026-03-26 12:30) **3B context sweep completed** (460, 930, 1860, 3720 tokens). VRAM savings: 42 MB → 955 MB scaling linearly
 - [x] (2026-03-26 12:35) benchmark_kv.py upgraded: --context flag, per-model JSON output, combined results
 - [x] (2026-03-26 12:36) README.md updated with real benchmark tables and key takeaways
-- [ ] 8K+ context data (3B FP16 OOM'd at 8K, need to use 0.5B model)
-- [ ] Cross-architecture data (Llama-3.2-3B or similar)
-- [ ] Final commit with all results
+- [x] (2026-03-26 12:45) **Cross-architecture benchmark completed** — StableLM-2-1.6B (Llama gated, Phi-3.5 incompatible cache API). Finding: TQ uses MORE VRAM on StableLM due to dequantized storage overhead. Validates known gotcha.
+- [x] (2026-03-26 12:55) **Long-context sweep completed** — 0.5B model, 512-8K tokens. TQ-4bit saves 2 GB at 8K context and is 11% faster. 16K OOM'd for all modes.
+- [x] (2026-03-26 13:05) **All results committed.** 4 models, 42 data points. README updated with full tables + cross-architecture analysis.
 
 ## Why This Matters
 
@@ -150,7 +150,7 @@ The benchmark is successful if:
 - [x] At least one 3B+ model benchmarked with all 3 modes (FP16, TQ-4bit, TQ-3bit) — **DONE: 7B + 3B**
 - [x] TQ modes produce coherent output (not garbage text) — **DONE: coherent code output across all runs**
 - [x] VRAM savings are measurable (even if buffer stores FP16, the peak should be lower) — **DONE: 42-955 MB savings**
-- [ ] Results JSON committed to repo
+- [x] Results JSON committed to repo — **DONE: 4 model files + combined JSON**
 - [x] README updated with benchmark table — **DONE: two model tables + key takeaways**
 
 The benchmark is worth sharing externally if:

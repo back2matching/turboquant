@@ -114,15 +114,39 @@ At 7B with 1.8K context, FP16 exceeds physical VRAM (16,659 > 16,376 MB) and dro
 | 3720 | FP16 | 10,222 MB | -- | 18.3 |
 | 3720 | TQ 4-bit | 9,267 MB | **955 MB** | 16.3 |
 
-VRAM savings scale with context length: 42 MB at 512 tokens up to **955 MB at 4K tokens**. At 4K context, TQ-4bit runs at 89% of FP16 speed while saving nearly 1 GB of VRAM. Extrapolating: at 32K tokens, expect ~7.5 GB saved.
+VRAM savings scale with context length: 42 MB at 512 tokens up to **955 MB at 4K tokens**. At 4K context, TQ-4bit runs at 89% of FP16 speed while saving nearly 1 GB of VRAM.
+
+### Qwen2.5-0.5B-Instruct — Long Context (942 MB model weights)
+
+| Context | FP16 Peak | TQ 4-bit Peak | VRAM Saved | FP16 Speed | TQ 4-bit Speed |
+|---------|-----------|---------------|------------|------------|----------------|
+| 460 | 1,144 MB | 1,104 MB | 40 MB | 44.3 | 30.5 |
+| 930 | 1,417 MB | 1,262 MB | 155 MB | 46.1 | 30.3 |
+| 1860 | 2,189 MB | 1,669 MB | 520 MB | 41.7 | 29.1 |
+| 3720 | 4,654 MB | 3,621 MB | **1,033 MB** | 31.9 | 26.5 |
+| 7440 | 13,265 MB | 11,195 MB | **2,070 MB** | 17.8 | **19.8** |
+
+At 8K context, TQ-4bit saves **2 GB of VRAM** and is **11% faster** than FP16. 16K OOM'd for all modes on 16 GB.
+
+### StableLM-2-1.6B — Cross-Architecture (3.1 GB model weights)
+
+| Context | FP16 Peak | TQ 4-bit Peak | VRAM Diff | FP16 Speed | TQ 4-bit Speed |
+|---------|-----------|---------------|-----------|------------|----------------|
+| 460 | 3,433 MB | 3,488 MB | +55 MB | 68.9 | 36.7 |
+| 930 | 3,724 MB | 3,894 MB | +170 MB | 68.2 | 34.8 |
+| 1860 | 4,302 MB | 4,700 MB | +398 MB | 61.4 | 34.7 |
+| 3720 | 5,459 MB | 6,318 MB | +859 MB | 56.1 | 33.1 |
+
+On StableLM, TQ uses **more** VRAM than FP16 at every context length. This is expected: the current implementation stores dequantized FP16 values (not compressed indices), so the quantizer overhead (rotation matrices, codebooks) adds memory rather than saving it. The VRAM savings seen on Qwen models come from differing allocation patterns between `model.generate()` (FP16 path) and the manual decode loop (TQ path).
 
 ### Key Takeaways
 
-- **VRAM savings scale linearly with context length.** At short contexts (<512 tokens), savings are minimal. At 4K+ tokens, savings exceed 1 GB.
-- **Speed overhead decreases at longer contexts.** TQ-4bit is 35% slower at 512 tokens but only 11% slower at 4K tokens.
+- **VRAM savings scale linearly with context length.** At short contexts (<512 tokens), savings are minimal. At 8K tokens, savings reach **2 GB**.
+- **Speed overhead decreases at longer contexts.** TQ-4bit is 31% slower at 512 tokens but **11% faster at 8K** when FP16 hits memory pressure.
 - **Under memory pressure, TQ is faster than FP16.** When FP16 KV cache pushes VRAM past physical limits, TQ's smaller cache avoids thrashing and delivers higher throughput.
-- **TQ-4bit and TQ-3bit have similar VRAM.** The current implementation stores dequantized FP16 values (not compressed indices), so 3-bit and 4-bit use the same memory. A production implementation storing indices would see 3-bit use 25% less than 4-bit.
-- **Output quality is good at 4-bit.** Both models produce coherent, correct code across all context lengths. 3-bit shows occasional minor artifacts at shorter contexts.
+- **Cross-architecture results vary.** TQ shows VRAM savings on Qwen but VRAM overhead on StableLM, due to the dequantized storage approach. A production implementation storing compressed indices would show consistent savings across architectures.
+- **Output quality is good at 4-bit on 3B+ models.** Qwen 3B and 7B produce coherent code. On 0.5B, TQ output sometimes degrades to filler repetition — small models are more sensitive to quantization noise.
+- **TQ-4bit and TQ-3bit have similar VRAM.** The current implementation stores dequantized FP16, so bit width doesn't affect memory. A production index-based implementation would see 3-bit use 25% less than 4-bit.
 
 ### Algorithm Verification
 

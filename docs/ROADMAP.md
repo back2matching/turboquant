@@ -11,9 +11,10 @@
 ✅ CUDA kernel -- Fused rotation+quantize (2.4x speedup)
 ✅ OpenAI-compatible inference server (`turboquant-server` CLI)
 ✅ 13 tests (core algorithms + cache integration)
-✅ Benchmark harness (FP16 vs TQ 3-bit vs TQ 4-bit)
+✅ Benchmark harness (FP16 vs TQ 3-bit vs TQ 4-bit, `--context` sweep, per-model JSON output)
+✅ **RTX 4080 benchmark data** -- 45 data points, 4 models (7B/3B/1.6B/0.5B), contexts up to 8K
 ✅ Published on PyPI as `turboquant 0.1.0`
-✅ llama.cpp PR submitted ([#20995](https://github.com/ggml-org/llama.cpp/pull/20995))
+⚠️ llama.cpp PR submitted ([#20995](https://github.com/ggml-org/llama.cpp/pull/20995)) — closed, premature. Multiple competing implementations in progress.
 
 ## Possible Next Steps
 

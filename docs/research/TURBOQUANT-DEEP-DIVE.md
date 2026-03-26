@@ -14,14 +14,15 @@
 
 **Stage 2 (QJL):** 1-bit Quantized Johnson-Lindenstrauss on the residual eliminates quantization bias for inner products. Adds 1 bit per dimension.
 
-## Key Claims vs Our Findings
+## Key Claims vs Our Findings (Updated 2026-03-26 with real data)
 
-| Claim | Paper | Our RTX 4080 Results |
+| Claim | Paper | Our RTX 4080 Results (45 data points, 4 models) |
 |-------|-------|---------------------|
-| 6x memory reduction | At 2.5-3 bits on H100 | 474MB saved at 1.5K ctx on 3B (6.8% reduction). Scales with context. |
-| 8x attention speedup | H100 with custom CUDA kernels | N/A — no CUDA kernels in our impl. 30% slower due to PyTorch rotation overhead. |
-| Zero accuracy loss at 3-bit | Llama-3.1-8B on LongBench | **FALSE for small models.** 3-bit degrades quality on 0.5B and 3B. 4-bit is minimum safe threshold. |
-| Data-oblivious (no calibration) | Confirmed | Confirmed. Works out of the box on any model. |
+| 6x memory reduction | At 2.5-3 bits on H100 | **479 MB saved at 1.8K ctx on 3B** (6.5%). **2 GB saved at 8K on 0.5B** (15.6%). Scales linearly with context. Note: current impl stores dequantized FP16, not indices — real compression would be larger. |
+| 8x attention speedup | H100 with custom CUDA kernels | N/A — no CUDA kernels in our impl. ~30% slower at short contexts, but **11% faster at 8K** and **40% faster at 7B/1.8K** when FP16 hits VRAM pressure. |
+| Zero accuracy loss at 3-bit | Llama-3.1-8B on LongBench | **FALSE for small models.** 3-bit degrades on 0.5B (filler repetition). 4-bit is coherent on 3B+. |
+| Data-oblivious (no calibration) | Confirmed | Confirmed. Works on Qwen, StableLM — any HF model out of the box. |
+| Architecture-agnostic | Implied | **Partially.** Works on Qwen (savings) but StableLM shows TQ uses MORE VRAM due to quantizer overhead. Architecture-dependent allocation patterns matter. |
 
 ## Code Availability (as of 2026-03-25)
 
@@ -31,7 +32,7 @@
 | PolarQuant | [github.com/ericshwu/PolarQuant](https://github.com/ericshwu/PolarQuant) | No license, requires custom Triton |
 | TurboQuant | None from Google | N/A |
 | Community PyTorch | Repos < 24hrs old, no CUDA kernels | Unlicensed |
-| **Our implementation** | `tests/kv-compression/turboquant.py` | FlockRun project |
+| **Our implementation** | [github.com/back2matching/turboquant](https://github.com/back2matching/turboquant) | Apache-2.0, PyPI `turboquant` |
 
 ## Theoretical Bounds
 
@@ -42,6 +43,6 @@ Inner product: unbiased (E[<y, dequant(quant(x))>] = <y, x>)
 
 ## Bottom Line
 
-TurboQuant is real and works. The VRAM savings are meaningful at long contexts (32K+). But for our specific setup (Qwen3.5 hybrid arch with tiny KV cache), existing Ollama q8_0 gives most of the benefit for zero engineering effort. TurboQuant becomes compelling for standard transformer models at long context on VRAM-constrained GPUs.
+TurboQuant is real and works. VRAM savings are meaningful at 4K+ context (1 GB on 3B, 2 GB on 0.5B at 8K). TQ becomes compelling for standard transformer models at long context on VRAM-constrained GPUs. At 7B scale, FP16 exceeds 16 GB VRAM at 1.8K context while TQ stays under — making TQ the only option for longer contexts without model offloading.
 
 See [SYNTHESIS.md](SYNTHESIS.md) for the full strategy.

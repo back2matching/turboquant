@@ -86,7 +86,15 @@ vectors_hat = tq.dequantize(indices, norms)
 
 ## Benchmarks (RTX 4080 16GB)
 
-Independent benchmarks on NVIDIA RTX 4080 (16 GB VRAM), PyTorch 2.5.1, CUDA 12.1. All results are reproducible via `benchmarks/benchmark_kv.py`.
+Independent benchmarks on NVIDIA RTX 4080 (16 GB VRAM), PyTorch 2.5.1, CUDA 12.1. 45 data points across 4 models.
+
+**Reproduce:**
+```bash
+python benchmarks/benchmark_kv.py --model Qwen/Qwen2.5-3B-Instruct --context "512,1024,2048,4096"
+python benchmarks/benchmark_kv.py --model Qwen/Qwen2.5-7B-Instruct --quick  # fast sanity check
+```
+
+Results are saved per-model (`benchmarks/results_*.json`) and combined (`benchmarks/benchmark_results.json`).
 
 ### Qwen2.5-7B-Instruct (14.5 GB model weights)
 
@@ -197,10 +205,10 @@ TurboQuant is the only pip-installable sub-8-bit KV cache compression that works
 
 ## llama.cpp Integration
 
-TurboQuant is also available as a KV cache type in llama.cpp:
-- **PR:** [ggml-org/llama.cpp#20995](https://github.com/ggml-org/llama.cpp/pull/20995)
-- **Usage:** `--cache-type-k tq4_0 --cache-type-v f16 --no-kv-offload`
-- **Result:** 70% less perplexity degradation than Q4_0 at the same VRAM
+A TQ4_0 KV cache type was proposed for llama.cpp:
+- **PR:** [ggml-org/llama.cpp#20995](https://github.com/ggml-org/llama.cpp/pull/20995) (closed — premature, multiple competing implementations in progress)
+- **Usage (if built from branch):** `--cache-type-k tq4_0 --cache-type-v f16 --no-kv-offload`
+- **Status:** Multiple community implementations in progress. Google's official code expected Q2 2026.
 
 ## Paper
 

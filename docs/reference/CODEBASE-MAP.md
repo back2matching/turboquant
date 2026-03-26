@@ -1,19 +1,21 @@
 # Codebase Map
 
-> Every file in the repo, what it does, and line counts.
+> Every file in the repo, what it does, and line counts. Updated 2026-03-26.
 
 ## Summary
 
 | Category | Files | Lines |
 |----------|-------|-------|
-| Python source | 4 | 849 |
-| CUDA | 1 | 194 |
+| Python source | 5 | 868 |
+| CUDA | 2 (kernel + setup) | 213 |
 | Tests | 2 (+1 __init__) | 155 |
-| Benchmarks | 1 | 254 |
+| Benchmarks | 1 (+4 JSON results) | 270 |
 | Examples | 1 | 40 |
-| Config/build | 4 | 155 |
-| Docs | 2 (README + CLAUDE) | 214 |
-| **Total** | **16** | **1,861** |
+| Config/build | 3 | 72 |
+| Docs (core) | 8 | 1,170 |
+| Docs (research) | 8 | 2,081 |
+| Docs (plans) | 1 archive | 166 |
+| **Total** | **~35** | **~5,035** |
 
 ## Package: turboquant/
 
@@ -30,7 +32,7 @@
 | File | Lines | What it does |
 |------|-------|-------------|
 | `turboquant_kernel.cu` | 194 | Two fused CUDA kernels. `turboquant_quantize_kernel`: warp-reduce norm, mat-vec rotation, nearest-centroid quantization. `turboquant_dequantize_kernel`: centroid lookup, inverse rotation, norm scaling. Python bindings via pybind11. All FP32. |
-| `setup.py` | 19 | Build script for the CUDA extension. Uses `torch.utils.cpp_extension.CUDAExtension`. |
+| `setup.py` | 19 | Build script for the CUDA extension. Uses `torch.utils.cpp_extension.CUDAExtension`. Optional — PyTorch fallback if not built. |
 
 ## Tests: tests/
 
@@ -46,7 +48,10 @@
 
 | File | Lines | What it does |
 |------|-------|-------------|
-| `benchmark_kv.py` | 254 | Full model benchmarking. Loads a HuggingFace model, runs FP16 baseline vs TurboQuant 3-bit and 4-bit on short and long prompts. Measures peak VRAM, KV cache estimate, tokens/sec, prefill time. Saves results to JSON. CLI: `--model`, `--quick`. |
+| `benchmark_kv.py` | 270 | Full model benchmarking. Loads a HuggingFace model, runs FP16 baseline vs TurboQuant 3-bit and 4-bit across configurable context lengths. Measures peak VRAM, KV cache estimate, tokens/sec, prefill time. Saves per-model + combined JSON. CLI: `--model`, `--quick`, `--context "512,1024,2048"`. |
+| `benchmark_results.json` | -- | Combined results across all models (45 data points). |
+| `results_qwen2.5-*.json` | -- | Per-model results (7B: 6 pts, 3B: 12 pts, 0.5B: 15 pts). |
+| `results_stablelm-*.json` | -- | StableLM-2-1.6B cross-architecture results (12 pts). |
 
 ## Examples: examples/
 
@@ -73,5 +78,34 @@
 
 | File | Lines | What it does |
 |------|-------|-------------|
-| `README.md` | 165 | PyPI/GitHub README. Installation, quick start, benchmarks, algorithm explanation, comparison with alternatives. |
-| `CLAUDE.md` | -- | Claude Code operating instructions (updated separately). |
+| `README.md` | 217 | PyPI/GitHub README. Installation, quick start, benchmarks (4 models, RTX 4080 data), algorithm explanation, comparison with alternatives. |
+| `CLAUDE.md` | 133 | Claude Code operating instructions. Current state, architecture, commands, gotchas. |
+
+## docs/
+
+| File | Lines | What it does |
+|------|-------|-------------|
+| `docs/README.md` | 44 | Doc index and project summary. |
+| `docs/ARCHITECTURE.md` | 233 | Full architecture walkthrough: core algorithms, cache pipeline, CUDA kernels, server. |
+| `docs/ROADMAP.md` | 59 | What shipped in 0.1.0, what's possible next. |
+| `docs/reference/API.md` | 356 | Complete API reference for all public classes and functions. |
+| `docs/guides/WORKFLOW.md` | 51 | ExecPlan workflow: Read -> Plan -> Execute -> Test -> Docs -> Commit. |
+
+## docs/research/
+
+| File | Lines | What it does |
+|------|-------|-------------|
+| `SYNTHESIS.md` | 191 | Strategic decision document (2026-03-25). Cross-repo analysis and phase planning. |
+| `TURBOQUANT-DEEP-DIVE.md` | 47 | Paper claims vs empirical findings. Comparison table. |
+| `KV-CACHE-LANDSCAPE.md` | 51 | Production engines and their KV cache compression support. |
+| `LLAMA-CPP-FEASIBILITY.md` | 540 | Detailed llama.cpp integration feasibility analysis. |
+| `LLAMACPP-PORT-DESIGN.md` | 114 | Technical design for TQ4_0 GGML type. |
+| `INFERENCE-SERVER-RESEARCH.md` | 425 | Server architecture options (stdlib vs FastAPI vs vLLM). |
+| `FLOCKRUN-GPU-ANALYSIS.md` | 55 | Multi-agent GPU VRAM scenarios. |
+| `TURBOQUANT-COMBINATIONS.md` | 658 | Feature interaction analysis across TurboQuant variants. |
+
+## docs/plans/archive/
+
+| File | Lines | What it does |
+|------|-------|-------------|
+| `PLAN-turboquant-kv-compression.md` | 166 | Archived: llama.cpp integration plan. PR #20995 submitted then closed. |

@@ -14,7 +14,7 @@
 - [x] (2026-03-26 12:36) README.md updated with real benchmark tables and key takeaways
 - [x] (2026-03-26 12:45) **Cross-architecture benchmark completed** — StableLM-2-1.6B (Llama gated, Phi-3.5 incompatible cache API). Finding: TQ uses MORE VRAM on StableLM due to dequantized storage overhead. Validates known gotcha.
 - [x] (2026-03-26 12:55) **Long-context sweep completed** — 0.5B model, 512-8K tokens. TQ-4bit saves 2 GB at 8K context and is 11% faster. 16K OOM'd for all modes.
-- [x] (2026-03-26 13:05) **All results committed.** 4 models, 42 data points. README updated with full tables + cross-architecture analysis.
+- [x] (2026-03-26 13:05) **All results committed.** 4 models, 45 data points. README updated with full tables + cross-architecture analysis.
 
 ## Why This Matters
 

@@ -14,9 +14,10 @@ KV cache compression for HuggingFace Transformers. First open-source implementat
 |--------|-------|
 | Version | 0.1.0 (PyPI) |
 | Tests | 13 (8 core + 5 cache) |
-| Python source | 849 lines (4 files) |
+| Python source | 868 lines (5 files) |
 | CUDA source | 194 lines (1 kernel) |
-| Total lines | ~1,860 (16 files) |
+| Benchmark data | 45 points (4 models, RTX 4080) |
+| Total lines | ~1,530 code + ~1,400 docs |
 | Dependencies | torch, numpy, scipy, transformers |
 | License | Apache 2.0 |
 | Python | >= 3.10 |
@@ -48,7 +49,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
 | `cuda/turboquant_kernel.cu` | 194 | Fused quantize + dequantize CUDA kernels |
 | `tests/test_core.py` | 92 | 8 tests: MSE bounds, norm preservation, compression ratio, IP unbiasedness, edge cases |
 | `tests/test_cache.py` | 63 | 5 tests: basic update, incremental gen, multi-layer, residual quality, bit widths |
-| `benchmarks/benchmark_kv.py` | 254 | FP16 vs TQ 3-bit vs TQ 4-bit on real models |
+| `benchmarks/benchmark_kv.py` | 270 | FP16 vs TQ 3-bit vs TQ 4-bit on real models. Flags: --model, --quick, --context |
 | `examples/basic_usage.py` | 40 | Drop-in usage with any HuggingFace model |
 
 ## Commands
@@ -65,6 +66,7 @@ cd cuda/ && python setup.py build_ext --inplace
 
 # Benchmark
 python benchmarks/benchmark_kv.py --model Qwen/Qwen2.5-0.5B-Instruct --quick
+python benchmarks/benchmark_kv.py --model Qwen/Qwen2.5-3B-Instruct --context "512,1024,2048,4096"
 
 # Build + publish
 python -m build
@@ -129,3 +131,12 @@ Full docs in `docs/`:
 - [docs/ROADMAP.md](docs/ROADMAP.md) -- What shipped, what's possible next
 - [docs/reference/API.md](docs/reference/API.md) -- Full API reference
 - [docs/reference/CODEBASE-MAP.md](docs/reference/CODEBASE-MAP.md) -- Every file, line counts
+- [docs/guides/WORKFLOW.md](docs/guides/WORKFLOW.md) -- ExecPlan workflow (Read->Plan->Execute->Test->Docs->Commit)
+
+Research (background analysis, not maintained):
+- [docs/research/SYNTHESIS.md](docs/research/SYNTHESIS.md) -- Strategic decision document
+- [docs/research/TURBOQUANT-DEEP-DIVE.md](docs/research/TURBOQUANT-DEEP-DIVE.md) -- Paper claims vs empirical findings
+- [docs/research/LLAMA-CPP-FEASIBILITY.md](docs/research/LLAMA-CPP-FEASIBILITY.md) -- llama.cpp integration analysis
+- [docs/research/KV-CACHE-LANDSCAPE.md](docs/research/KV-CACHE-LANDSCAPE.md) -- Production KV compression landscape
+- [docs/research/INFERENCE-SERVER-RESEARCH.md](docs/research/INFERENCE-SERVER-RESEARCH.md) -- Server architecture options
+- [docs/research/TURBOQUANT-COMBINATIONS.md](docs/research/TURBOQUANT-COMBINATIONS.md) -- Feature interaction analysis

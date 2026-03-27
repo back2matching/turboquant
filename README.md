@@ -113,16 +113,16 @@ At 7B with 1.8K context, FP16 exceeds physical VRAM (16,659 > 16,376 MB) and dro
 
 | Context | KV Mode | Peak VRAM | VRAM Saved | Speed (tok/s) |
 |---------|---------|-----------|------------|---------------|
-| 460 | FP16 | 6,126 MB | -- | 30.7 |
-| 460 | TQ 4-bit | 6,078 MB | 48 MB | 18.7 |
-| 930 | FP16 | 6,451 MB | -- | 31.4 |
-| 930 | TQ 4-bit | 6,267 MB | 184 MB | 18.8 |
-| 1860 | FP16 | 7,359 MB | -- | 26.0 |
-| 1860 | TQ 4-bit | 6,851 MB | **508 MB** | 17.8 |
-| 3720 | FP16 | 10,222 MB | -- | 3.5 |
-| 3720 | TQ 4-bit | 9,206 MB | **1,016 MB** | **6.1** |
+| 460 | FP16 | 6,126 MB | -- | 14.6 |
+| 460 | TQ 4-bit | 6,075 MB | 51 MB | 7.8 |
+| 930 | FP16 | 6,451 MB | -- | 14.1 |
+| 930 | TQ 4-bit | 6,260 MB | 191 MB | 7.4 |
+| 1860 | FP16 | 7,359 MB | -- | 15.4 |
+| 1860 | TQ 4-bit | 6,835 MB | **524 MB** | 15.5 |
+| 3720 | FP16 | 10,222 MB | -- | 2.5 |
+| 3720 | TQ 4-bit | 9,174 MB | **1,048 MB** | **7.4** |
 
-VRAM savings scale with context length: 48 MB at 512 tokens up to **1,016 MB at 4K tokens**. At 4K context, FP16 hits memory pressure (3.5 tok/s) while TQ-4bit runs at **6.1 tok/s — 74% faster**.
+VRAM savings scale with context length: 51 MB at 512 tokens up to **1,048 MB at 4K tokens**. At 4K context, FP16 hits memory pressure (2.5 tok/s) while TQ-4bit with nibble packing runs at **7.4 tok/s — 196% faster**.
 
 ### Qwen2.5-0.5B-Instruct — Long Context (942 MB model weights)
 

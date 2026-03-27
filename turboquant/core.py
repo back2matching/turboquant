@@ -22,6 +22,41 @@ from typing import Optional, Tuple
 import math
 
 
+def pack_uint4(indices: torch.Tensor) -> torch.Tensor:
+    """Pack pairs of 4-bit indices into single uint8 bytes (nibble packing).
+
+    Args:
+        indices: uint8 tensor with values 0-15. Last dim must be even.
+
+    Returns:
+        Packed uint8 tensor with last dim halved.
+    """
+    assert indices.shape[-1] % 2 == 0, f"Last dim must be even, got {indices.shape[-1]}"
+    high = indices[..., 0::2] << 4
+    low = indices[..., 1::2]
+    return (high | low).to(torch.uint8)
+
+
+def unpack_uint4(packed: torch.Tensor, orig_dim: int) -> torch.Tensor:
+    """Unpack nibble-packed uint8 bytes into pairs of 4-bit indices.
+
+    Args:
+        packed: uint8 tensor from pack_uint4().
+        orig_dim: Original last dimension size before packing.
+
+    Returns:
+        uint8 tensor with original shape restored.
+    """
+    high = (packed >> 4) & 0x0F
+    low = packed & 0x0F
+    # Interleave high and low back to original order
+    shape = packed.shape[:-1] + (orig_dim,)
+    out = torch.empty(shape, dtype=torch.uint8, device=packed.device)
+    out[..., 0::2] = high
+    out[..., 1::2] = low
+    return out
+
+
 class TurboQuantMSE:
     """
     Algorithm 1: TurboQuant_MSE -- MSE-optimal vector quantization.

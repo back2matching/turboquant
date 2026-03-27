@@ -3,6 +3,7 @@
 import torch
 import pytest
 from turboquant import TurboQuantCache
+from turboquant.core import pack_uint4, unpack_uint4
 
 
 @pytest.fixture
@@ -91,3 +92,24 @@ class TestTurboQuantCache:
         assert stats["compressed_bytes"] > 0
         assert stats["total_bytes"] < stats["fp16_equivalent_bytes"]
         assert stats["savings_ratio"] > 1.0
+
+    def test_nibble_packing_roundtrip(self, device):
+        """Verify pack_uint4/unpack_uint4 is lossless."""
+        indices = torch.randint(0, 16, (2, 4, 10, 128), dtype=torch.uint8, device=device)
+        packed = pack_uint4(indices)
+        assert packed.shape[-1] == 64  # halved
+        unpacked = unpack_uint4(packed, 128)
+        assert torch.equal(indices, unpacked)
+
+    def test_4bit_uses_packed_storage(self, device):
+        """Verify 4-bit cache stores nibble-packed indices (half the size of uint8)."""
+        cache = TurboQuantCache(bits=4)
+        k = torch.randn(1, 4, 256, 128, device=device, dtype=torch.float16)
+        v = torch.randn(1, 4, 256, 128, device=device, dtype=torch.float16)
+        cache.update(k, v, layer_idx=0)
+
+        layer = cache.layers[0]
+        # 128 tokens quantized, 128 in residual
+        # Packed: last dim should be 64 (128 / 2) not 128
+        assert layer._key_indices.shape[-1] == 64
+        assert layer._key_indices.dtype == torch.uint8

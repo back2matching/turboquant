@@ -8,7 +8,7 @@ via TurboQuant. Full API compatibility with transformers 5.3.0+.
 import torch
 from typing import Any, Optional, Tuple
 from transformers.cache_utils import DynamicCache, DynamicLayer
-from turboquant.core import TurboQuantMSE
+from turboquant.core import TurboQuantMSE, pack_uint4, unpack_uint4
 
 # Shared quantizer registry (one per head_dim)
 _quantizers: dict = {}
@@ -89,11 +89,16 @@ class TurboQuantLayer(DynamicLayer):
             v_flat = to_quantize_v.reshape(-1, head_dim)
             v_idx, v_norms = quantizer.quantize(v_flat)
 
-            # Store raw indices (uint8) and norms (float32) — NOT dequantized FP16
+            # Store compressed indices (packed if 4-bit) and norms
             k_idx = k_idx.reshape(to_quantize_k.shape)
             k_norms = k_norms.reshape(to_quantize_k.shape[:-1] + (1,))
             v_idx = v_idx.reshape(to_quantize_v.shape)
             v_norms = v_norms.reshape(to_quantize_v.shape[:-1] + (1,))
+
+            # Nibble-pack 4-bit indices (2 per byte, halves storage)
+            if self.bits == 4 and head_dim % 2 == 0:
+                k_idx = pack_uint4(k_idx)
+                v_idx = pack_uint4(v_idx)
 
             self._key_indices = torch.cat([self._key_indices, k_idx], dim=-2) if self._key_indices.numel() > 0 else k_idx
             self._key_norms = torch.cat([self._key_norms, k_norms], dim=-2) if self._key_norms.numel() > 0 else k_norms
@@ -107,14 +112,22 @@ class TurboQuantLayer(DynamicLayer):
         # Build full view: dequantize compressed (old) + residual (recent FP16)
         if self._key_indices.numel() > 0:
             quantizer = _get_quantizer(self._head_dim, self.bits, str(self.device))
+
+            # Unpack nibble-packed 4-bit indices before dequantizing
+            k_idx = self._key_indices
+            v_idx = self._value_indices
+            if self.bits == 4 and self._head_dim % 2 == 0:
+                k_idx = unpack_uint4(k_idx, self._head_dim)
+                v_idx = unpack_uint4(v_idx, self._head_dim)
+
             k_deq = quantizer.dequantize(
-                self._key_indices.reshape(-1, self._head_dim),
+                k_idx.reshape(-1, self._head_dim),
                 self._key_norms.reshape(-1, 1),
-            ).reshape(self._key_indices.shape).to(dtype=self.dtype)
+            ).reshape(k_idx.shape).to(dtype=self.dtype)
             v_deq = quantizer.dequantize(
-                self._value_indices.reshape(-1, self._head_dim),
+                v_idx.reshape(-1, self._head_dim),
                 self._value_norms.reshape(-1, 1),
-            ).reshape(self._value_indices.shape).to(dtype=self.dtype)
+            ).reshape(v_idx.shape).to(dtype=self.dtype)
             self.keys = torch.cat([k_deq, self._residual_keys], dim=-2)
             self.values = torch.cat([v_deq, self._residual_values], dim=-2)
         else:

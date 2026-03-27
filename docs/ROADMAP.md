@@ -1,8 +1,8 @@
 # Roadmap
 
-> What shipped, what's possible next. Status: published on PyPI, not actively developed.
+> What shipped, what's possible next. Current: v0.2.0 on PyPI.
 
-## Shipped (v0.1.0)
+## Shipped (v0.1.0 + v0.2.0)
 
 ✅ TurboQuantMSE -- MSE-optimal vector quantization (Algorithm 1)
 ✅ TurboQuantIP -- Inner-product optimal quantization (Algorithm 2)

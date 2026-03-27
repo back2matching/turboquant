@@ -30,7 +30,7 @@ Background analysis documents (written pre-implementation, updated with real dat
 ## Quick Links
 
 - **Paper:** [arXiv:2504.19874](https://arxiv.org/abs/2504.19874) (ICLR 2026)
-- **PyPI:** [turboquant 0.1.0](https://pypi.org/project/turboquant/)
+- **PyPI:** [turboquant 0.2.0](https://pypi.org/project/turboquant/)
 - **License:** Apache 2.0
 - **llama.cpp PR:** [ggml-org/llama.cpp#20995](https://github.com/ggml-org/llama.cpp/pull/20995) (closed)
 

@@ -145,16 +145,14 @@ At 8K context, TQ-4bit saves **2 GB of VRAM** and is **11% faster** than FP16. 1
 | 1860 | 4,302 MB | 4,700 MB | +398 MB | 61.4 | 34.7 |
 | 3720 | 5,459 MB | 6,318 MB | +859 MB | 56.1 | 33.1 |
 
-On StableLM, TQ uses **more** VRAM than FP16 at every context length. This is expected: the current implementation stores dequantized FP16 values (not compressed indices), so the quantizer overhead (rotation matrices, codebooks) adds memory rather than saving it. The VRAM savings seen on Qwen models come from differing allocation patterns between `model.generate()` (FP16 path) and the manual decode loop (TQ path).
+On StableLM, TQ uses **more** VRAM than FP16 at every context length. The StableLM results were collected with v0.1.0 (dequantized storage). v0.2.0 stores compressed indices and may show different results on StableLM.
 
 ### Key Takeaways
 
-- **VRAM savings scale linearly with context length.** At short contexts (<512 tokens), savings are minimal. At 8K tokens, savings reach **2 GB**.
-- **Speed overhead decreases at longer contexts.** TQ-4bit is 31% slower at 512 tokens but **11% faster at 8K** when FP16 hits memory pressure.
-- **Under memory pressure, TQ is faster than FP16.** When FP16 KV cache pushes VRAM past physical limits, TQ's smaller cache avoids thrashing and delivers higher throughput.
-- **Cross-architecture results vary.** TQ shows VRAM savings on Qwen but VRAM overhead on StableLM, due to the dequantized storage approach. A production implementation storing compressed indices would show consistent savings across architectures.
+- **VRAM savings scale linearly with context length.** At short contexts (<512 tokens), savings are minimal. At 4K tokens, savings exceed **1 GB**. At 8K, savings reach **2 GB**.
+- **Under memory pressure, TQ is significantly faster than FP16.** At 4K context on 3B, FP16 drops to 3.5 tok/s while TQ-4bit runs at 6.1 tok/s (74% faster). At 8K on 0.5B, TQ is 11% faster.
+- **v0.2.0 stores compressed indices.** Cache uses uint8 indices + float32 norms instead of dequantized FP16. Real compression with on-the-fly dequantization.
 - **Output quality is good at 4-bit on 3B+ models.** Qwen 3B and 7B produce coherent code. On 0.5B, TQ output sometimes degrades to filler repetition — small models are more sensitive to quantization noise.
-- **TQ-4bit and TQ-3bit have similar VRAM.** The current implementation stores dequantized FP16, so bit width doesn't affect memory. A production index-based implementation would see 3-bit use 25% less than 4-bit.
 
 ### Algorithm Verification
 

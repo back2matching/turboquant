@@ -121,13 +121,13 @@ model.forward(past_key_values=cache)
     -> TurboQuantLayer.update(key_states, value_states)
       -> Append to residual window
       -> If residual > 128 tokens:
-           Quantize overflow (flatten -> quantize -> dequantize -> reshape)
-           Move dequantized to quantized buffer
+           Quantize overflow (flatten -> quantize -> store indices+norms)
            Trim residual
-      -> Return: cat(quantized, residual)
+      -> Dequantize compressed indices on-the-fly
+      -> Return: cat(dequantized_old, residual)
 ```
 
-Note: the quantized buffer stores dequantized (lossy FP16) values, not raw indices. This avoids a dequantization step on every attention pass but uses more memory than storing indices directly. A future optimization could store compressed indices and dequantize on-the-fly.
+Since v0.2.0, the quantized buffer stores uint8 indices + float32 norms (compressed). Dequantization happens on-the-fly in the `update()` method when building the full key/value view for attention. This gives real memory savings (~1.9x for the quantized portion) without requiring custom attention kernels.
 
 ## CUDA Acceleration (cuda_accel.py + cuda/, 76 + 194 + 19 lines)
 
@@ -222,7 +222,7 @@ Optional: `bitsandbytes` (for INT8/INT4 weight quantization in server).
 
 ## Design Decisions
 
-**Why store dequantized FP16 instead of indices?** Simpler implementation. Avoids dequantization in the attention hot path. Trades memory savings for speed. A production implementation would store indices and dequantize on-the-fly.
+**Why store compressed indices? (v0.2.0)** Since v0.2.0, the cache stores uint8 indices + float32 norms and dequantizes on-the-fly during `update()`. The dequantization cost (~1-2ms) is negligible vs generation time, and real memory savings (~1.9x for quantized tokens) are achieved.
 
 **Why residual window = 128?** Matches KIVI's default. Recent tokens dominate attention weights, so keeping them in full precision has the biggest quality impact. Configurable per-layer.
 

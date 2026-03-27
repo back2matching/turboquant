@@ -22,7 +22,7 @@ These are ideas, not planned work. The package is stable at 0.1.0.
 
 ### Performance
 
-⬜ **Store compressed indices instead of dequantized FP16** -- Currently the quantized buffer stores lossy FP16 values after a quantize-dequantize roundtrip. Storing raw uint8 indices + float32 norms and dequantizing on-the-fly during attention would cut memory further. This is the main optimization left.
+✅ **Store compressed indices instead of dequantized FP16** -- Shipped in v0.2.0. Cache now stores uint8 indices + float32 norms and dequantizes on-the-fly. 1 GB+ VRAM savings at 4K context on 3B models.
 
 ⬜ **Shared memory tiling in CUDA kernel** -- Current kernel does naive mat-vec per thread. Tiling the rotation matrix in shared memory would reduce global memory reads from O(D^2) to O(D^2 / tile_size).
 

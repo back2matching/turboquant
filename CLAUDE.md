@@ -6,18 +6,18 @@
 
 KV cache compression for HuggingFace Transformers. First open-source implementation of Google's TurboQuant algorithm (ICLR 2026, arXiv:2504.19874). Compresses KV cache entries from 16 bits to 3-4 bits per element using random rotation + optimal scalar quantization.
 
-**Status:** Published 0.1.0 on PyPI. Stable, not actively developed beyond maintenance.
+**Status:** v0.2.0 — compressed index storage shipped. Published on PyPI.
 
 ## Current State
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.1.0 (PyPI) |
-| Tests | 13 (8 core + 5 cache) |
-| Python source | 868 lines (5 files) |
+| Version | 0.2.0 (PyPI) |
+| Tests | 15 (8 core + 7 cache) |
+| Python source | 926 lines (5 files) |
 | CUDA source | 194 lines (1 kernel) |
 | Benchmark data | 45 points (4 models, RTX 4080) |
-| Total lines | ~1,530 code + ~1,400 docs |
+| Total lines | ~1,590 code + ~1,400 docs |
 | Dependencies | torch, numpy, scipy, transformers |
 | License | Apache 2.0 |
 | Python | >= 3.10 |
@@ -43,12 +43,12 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
 | File | Lines | What |
 |------|-------|------|
 | `turboquant/core.py` | 344 | TurboQuantMSE (Algorithm 1), TurboQuantIP (Algorithm 2), compute_memory_bytes() |
-| `turboquant/cache.py` | 166 | TurboQuantLayer, TurboQuantCache, shared quantizer registry |
+| `turboquant/cache.py` | 224 | TurboQuantLayer (compressed index storage), TurboQuantCache, memory_usage_bytes(), shared quantizer registry |
 | `turboquant/cuda_accel.py` | 76 | cuda_quantize(), cuda_dequantize(), is_cuda_available() |
 | `turboquant/server.py` | 263 | load_model(), generate_response(), TurboQuantHandler, main() |
 | `cuda/turboquant_kernel.cu` | 194 | Fused quantize + dequantize CUDA kernels |
 | `tests/test_core.py` | 92 | 8 tests: MSE bounds, norm preservation, compression ratio, IP unbiasedness, edge cases |
-| `tests/test_cache.py` | 63 | 5 tests: basic update, incremental gen, multi-layer, residual quality, bit widths |
+| `tests/test_cache.py` | 93 | 7 tests: basic update, incremental gen, multi-layer, residual quality, bit widths, compressed storage, memory tracking |
 | `benchmarks/benchmark_kv.py` | 270 | FP16 vs TQ 3-bit vs TQ 4-bit on real models. Flags: --model, --quick, --context |
 | `examples/basic_usage.py` | 40 | Drop-in usage with any HuggingFace model |
 
@@ -93,7 +93,7 @@ twine upload dist/*
 
 ## Gotchas
 
-- **Dequantized storage, not compressed**: The quantized buffer in `cache.py` stores lossy FP16 values after a quantize-dequantize roundtrip, not raw indices. This simplifies the attention path but doesn't give the full memory savings. A production implementation would store indices.
+- **~~Dequantized storage~~ FIXED in v0.2.0**: Cache now stores uint8 indices + float32 norms. Dequantizes on-the-fly in `update()`. Real compression achieved.
 - **scipy dependency for codebook**: `betaincinv` (inverse regularized incomplete beta) is only in scipy, not numpy. This makes the package heavier than you'd expect for "just quantization."
 - **Quantizer registry is global**: `_quantizers` in `cache.py` caches quantizer instances by (head_dim, bits, device). This is a module-level dict. If you create caches with different seeds, they'll share quantizers (always seed=42).
 - **TurboQuantIP.dequantize() signature differs**: Takes 4 args (mse_indices, norms, qjl_signs, residual_norms) vs TurboQuantMSE's 2 args (indices, norms). Not a clean override.
@@ -114,7 +114,7 @@ twine upload dist/*
 ## PyPI
 
 - Account: back2matching
-- Package: turboquant 0.1.0
+- Package: turboquant 0.2.0
 - Wheel: pure Python (CUDA extension not included, must be built locally)
 
 ## Paper

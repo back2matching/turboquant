@@ -8,7 +8,7 @@
 from turboquant import TurboQuantMSE, TurboQuantIP, TurboQuantCache
 ```
 
-Version: `turboquant.__version__` = `"0.1.0"`
+Version: `turboquant.__version__` = `"0.2.0"`
 
 ---
 

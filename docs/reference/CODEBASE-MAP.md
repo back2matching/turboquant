@@ -6,7 +6,7 @@
 
 | Category | Files | Lines |
 |----------|-------|-------|
-| Python source | 5 | 868 |
+| Python source | 5 | 926 |
 | CUDA | 2 (kernel + setup) | 213 |
 | Tests | 2 (+1 __init__) | 155 |
 | Benchmarks | 1 (+4 JSON results) | 270 |
@@ -21,9 +21,9 @@
 
 | File | Lines | What it does |
 |------|-------|-------------|
-| `__init__.py` | 19 | Exports TurboQuantMSE, TurboQuantIP, TurboQuantCache. Defines `__version__ = "0.1.0"`. |
+| `__init__.py` | 19 | Exports TurboQuantMSE, TurboQuantIP, TurboQuantCache. Defines `__version__ = "0.2.0"`. |
 | `core.py` | 344 | Core algorithms. `TurboQuantMSE` (Algorithm 1): random rotation via QR + optimal Beta-distribution codebook + scalar quantization. `TurboQuantIP` (Algorithm 2): MSE at (bits-1) + QJL residual correction. Also `compute_memory_bytes()`. Includes inline sanity test in `__main__`. |
-| `cache.py` | 166 | HuggingFace integration. `TurboQuantLayer` subclasses `DynamicLayer` with residual window (128 tokens FP16, overflow quantized). `TurboQuantCache` subclasses `DynamicCache`, creates TurboQuantLayer per transformer layer. Shared quantizer registry `_get_quantizer()`. |
+| `cache.py` | 224 | HuggingFace integration. `TurboQuantLayer` stores compressed uint8 indices + float32 norms (v0.2.0), dequantizes on-the-fly. Residual window (128 tokens FP16). `TurboQuantCache` subclasses `DynamicCache`. `memory_usage_bytes()` reports compression stats. |
 | `cuda_accel.py` | 76 | Optional CUDA wrapper. `cuda_quantize()` and `cuda_dequantize()` with automatic fallback to PyTorch. `is_cuda_available()` check. |
 | `server.py` | 263 | OpenAI-compatible inference server. `load_model()` with INT8/INT4 weight quantization. `generate_response()` with TurboQuantCache. `TurboQuantHandler` HTTP handler (3 endpoints). CLI entry point via `main()`. |
 
@@ -40,9 +40,9 @@
 |------|-------|-------|---------------|
 | `__init__.py` | 0 | -- | Package marker |
 | `test_core.py` | 92 | 8 | `TestTurboQuantMSE`: 1-bit and 2-bit within theoretical bounds, roundtrip norm preservation, compression ratio. `TestTurboQuantIP`: unbiased inner product. `TestEdgeCases`: single vector, zero vector, different dimensions. |
-| `test_cache.py` | 63 | 5 | `TestTurboQuantCache`: basic update, incremental generation (prefill + 10 tokens), multi-layer (8 layers), residual window quality (FP16 exactness), different bit widths. |
+| `test_cache.py` | 93 | 7 | `TestTurboQuantCache`: basic update, incremental generation, multi-layer, residual window quality, different bit widths, compressed index storage verification, memory usage tracking. |
 
-**Total: 13 tests.**
+**Total: 15 tests.**
 
 ## Benchmarks: benchmarks/
 
@@ -63,7 +63,7 @@
 
 | File | Lines | What it does |
 |------|-------|-------------|
-| `pyproject.toml` | 46 | Package metadata. Name: turboquant. Version: 0.1.0. Python >= 3.10. Dependencies: torch, transformers, scipy, numpy. Optional: pytest, uvicorn/fastapi. Entry point: `turboquant-server`. |
+| `pyproject.toml` | 46 | Package metadata. Name: turboquant. Version: 0.2.0. Python >= 3.10. Dependencies: torch, transformers, scipy, numpy. Optional: pytest, uvicorn/fastapi. Entry point: `turboquant-server`. |
 | `LICENSE` | 16 | Apache 2.0 |
 | `.gitignore` | 10 | Standard Python ignores (__pycache__, dist, .egg-info, etc.) |
 
@@ -71,8 +71,8 @@
 
 | File | Size | What it is |
 |------|------|-----------|
-| `turboquant-0.1.0.tar.gz` | 17.5 KB | Source distribution |
-| `turboquant-0.1.0-py3-none-any.whl` | 15.0 KB | Wheel (pure Python, no CUDA) |
+| `turboquant-0.2.0.tar.gz` | -- | Source distribution |
+| `turboquant-0.2.0-py3-none-any.whl` | -- | Wheel (pure Python, no CUDA) |
 
 ## Root Docs
 

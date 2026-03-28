@@ -14,6 +14,7 @@ Paper: https://arxiv.org/abs/2504.19874
 
 from turboquant.core import TurboQuantMSE, TurboQuantIP
 from turboquant.cache import TurboQuantCache
+from turboquant.static_cache import TurboQuantStaticCache
 
 __version__ = "0.2.0"
-__all__ = ["TurboQuantMSE", "TurboQuantIP", "TurboQuantCache"]
+__all__ = ["TurboQuantMSE", "TurboQuantIP", "TurboQuantCache", "TurboQuantStaticCache"]

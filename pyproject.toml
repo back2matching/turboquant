@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "turboquant"
-version = "0.2.0"
+version = "0.3.0"
 description = "LLM runs 2x faster at long context. Compresses KV cache to 4 bits — drop-in for any HuggingFace model."
 readme = "README.md"
 license = {text = "Apache-2.0"}

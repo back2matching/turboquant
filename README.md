@@ -8,12 +8,20 @@
 | **VRAM saved** | — | **1 GB** |
 | **Qwen 7B @ 2K context** | 1.0 tok/s (OOM) | **1.4 tok/s** |
 
-Drop-in for any HuggingFace model. Three lines:
+Drop-in for any HuggingFace model:
 
 ```python
 from turboquant import TurboQuantCache
 
+# Symmetric: 4-bit keys + 4-bit values
 cache = TurboQuantCache(bits=4)
+
+# Asymmetric: 4-bit keys + 2-bit values (better quality, less memory)
+cache = TurboQuantCache(key_bits=4, value_bits=2)
+
+# Protect sensitive layers at full FP16 precision
+cache = TurboQuantCache(key_bits=4, value_bits=2, protected_layers=[0, 1, -1, -2])
+
 outputs = model(**inputs, past_key_values=cache, use_cache=True)
 ```
 
@@ -171,13 +179,21 @@ On StableLM, TQ uses **more** VRAM than FP16 at every context length. The Stable
 
 ## How It Works
 
-TurboQuant uses three ideas from the paper:
+TurboQuant uses three ideas from the paper, plus community-validated optimizations:
 
 1. **Random rotation**: Multiply each KV vector by a random orthogonal matrix. This spreads the information evenly across all coordinates, making them nearly independent.
 
 2. **Optimal codebook**: Each coordinate now follows a predictable Beta distribution. We compute the mathematically optimal quantization levels for this distribution. No training data needed.
 
 3. **Residual window**: The most recent 128 tokens stay in full FP16 precision. Only older tokens get compressed. This preserves quality for the tokens attention focuses on most.
+
+**v0.3.0 additions** (adopted from community findings across 11 TurboQuant implementations):
+
+4. **Asymmetric K/V allocation**: Keys need more bits than values — K/V norm disparity can exceed 1000x. Default: 4-bit keys + 2-bit values for the best quality/memory tradeoff.
+
+5. **Layer-adaptive precision**: First and last transformer layers are most sensitive. `protected_layers=[0, 1, -1, -2]` keeps them at full FP16 while compressing middle layers.
+
+6. **MSE-only quantization**: Six independent teams confirmed QJL (Algorithm 2 from the paper) hurts attention quality. We use MSE-optimal quantization only (Algorithm 1). TurboQuantIP is deprecated.
 
 The rotation is computed once (not per-token) and the codebook is derived analytically. No calibration, no fine-tuning, works with any model out of the box.
 

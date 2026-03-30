@@ -218,6 +218,11 @@ class TurboQuantIP(TurboQuantMSE):
     """
     Algorithm 2: TurboQuant_IP -- Inner-product optimal quantization.
 
+    .. deprecated:: 0.3.0
+        Community consensus (6 independent teams) found that QJL hurts attention
+        quality because softmax exponentially amplifies QJL's random noise.
+        Use TurboQuantMSE instead for KV cache compression.
+
     Two-stage approach:
       Stage 1: TurboQuant_MSE at (bits-1) for MSE-optimal compression
       Stage 2: QJL (Quantized Johnson-Lindenstrauss) on residual for unbiased inner products
@@ -226,6 +231,12 @@ class TurboQuantIP(TurboQuantMSE):
     """
 
     def __init__(self, dim: int, bits: int = 3, device: str = 'cuda', seed: int = 42):
+        import warnings
+        warnings.warn(
+            "TurboQuantIP is deprecated since v0.3.0. Community consensus found QJL hurts "
+            "attention quality (softmax amplifies random noise). Use TurboQuantMSE instead.",
+            DeprecationWarning, stacklevel=2,
+        )
         # Stage 1: MSE quantizer at (bits-1)
         super().__init__(dim, bits=max(bits - 1, 1), device=device, seed=seed)
         self.total_bits = bits

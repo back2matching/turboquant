@@ -113,3 +113,48 @@ class TestTurboQuantCache:
         # Packed: last dim should be 64 (128 / 2) not 128
         assert layer._key_indices.shape[-1] == 64
         assert layer._key_indices.dtype == torch.uint8
+
+    def test_asymmetric_kv_bits(self, device):
+        """Verify asymmetric K/V allocation uses different quantizers."""
+        cache = TurboQuantCache(key_bits=4, value_bits=2)
+        k = torch.randn(1, 4, 256, 128, device=device)
+        v = torch.randn(1, 4, 256, 128, device=device)
+        cache.update(k, v, layer_idx=0)
+
+        layer = cache.layers[0]
+        assert layer.key_bits == 4
+        assert layer.value_bits == 2
+        # 4-bit keys should be packed (last dim 64), 2-bit values should not (last dim 128)
+        assert layer._key_indices.shape[-1] == 64   # packed
+        assert layer._value_indices.shape[-1] == 128 # not packed (2-bit uses uint8)
+
+    def test_protected_layers(self, device):
+        """Protected layers should keep everything in FP16, no quantization."""
+        cache = TurboQuantCache(bits=4, protected_layers=[0, 1])
+        for layer_idx in range(4):
+            k = torch.randn(1, 4, 256, 128, device=device, dtype=torch.float16)
+            v = torch.randn(1, 4, 256, 128, device=device, dtype=torch.float16)
+            full_k, full_v = cache.update(k, v, layer_idx=layer_idx)
+
+        # Protected layers: no compressed indices, all in residual
+        assert cache.layers[0].skip_quantization
+        assert cache.layers[0]._key_indices.numel() == 0
+        assert cache.layers[0]._residual_keys.shape[-2] == 256
+        # Unprotected layers: should have compressed indices
+        assert not cache.layers[2].skip_quantization
+        assert cache.layers[2]._key_indices.numel() > 0
+
+    def test_protected_layer_exact_output(self, device):
+        """Protected layer output should be bit-exact with input (no quantization loss)."""
+        cache = TurboQuantCache(bits=4, protected_layers=[0])
+        k = torch.randn(1, 4, 50, 128, device=device, dtype=torch.float16)
+        v = torch.randn(1, 4, 50, 128, device=device, dtype=torch.float16)
+        full_k, full_v = cache.update(k, v, layer_idx=0)
+        assert torch.equal(k, full_k)
+        assert torch.equal(v, full_v)
+
+    def test_bits_shorthand_backward_compat(self, device):
+        """bits=N should work as shorthand for key_bits=N, value_bits=N."""
+        cache = TurboQuantCache(bits=3)
+        assert cache.key_bits == 3
+        assert cache.value_bits == 3

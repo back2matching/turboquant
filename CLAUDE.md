@@ -133,10 +133,7 @@ Full docs in `docs/`:
 - [docs/reference/CODEBASE-MAP.md](docs/reference/CODEBASE-MAP.md) -- Every file, line counts
 - [docs/guides/WORKFLOW.md](docs/guides/WORKFLOW.md) -- ExecPlan workflow (Read->Plan->Execute->Test->Docs->Commit)
 
-Research (background analysis, not maintained):
-- [docs/research/SYNTHESIS.md](docs/research/SYNTHESIS.md) -- Strategic decision document
-- [docs/research/TURBOQUANT-DEEP-DIVE.md](docs/research/TURBOQUANT-DEEP-DIVE.md) -- Paper claims vs empirical findings
-- [docs/research/LLAMA-CPP-FEASIBILITY.md](docs/research/LLAMA-CPP-FEASIBILITY.md) -- llama.cpp integration analysis
-- [docs/research/KV-CACHE-LANDSCAPE.md](docs/research/KV-CACHE-LANDSCAPE.md) -- Production KV compression landscape
-- [docs/research/INFERENCE-SERVER-RESEARCH.md](docs/research/INFERENCE-SERVER-RESEARCH.md) -- Server architecture options
-- [docs/research/TURBOQUANT-COMBINATIONS.md](docs/research/TURBOQUANT-COMBINATIONS.md) -- Feature interaction analysis
+Internal docs (local only, not tracked in git):
+- `docs/research/` -- Background analysis, competitive landscape, paper deep-dives
+- `docs/marketing/` -- Blog post, Reddit drafts, strategy, portfolio blog plan
+- `docs/plans/` -- Active and archived project plans

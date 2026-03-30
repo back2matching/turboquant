@@ -8,3 +8,8 @@ build/
 .eggs/
 *.egg
 .pytest_cache/
+
+# Internal docs (keep locally, don't publish)
+docs/plans/
+docs/marketing/
+docs/research/

@@ -1,0 +1,12 @@
+# Default: all files → maintainer
+*                             @back2matching
+
+# Subsystem ownership — contributors who maintain an area for 3+ merged PRs
+# can add themselves below with maintainer approval.
+# /turboquant/core.py           @back2matching
+# /turboquant/cache.py          @back2matching
+# /turboquant/cuda_accel.py     @back2matching
+# /turboquant/server.py         @back2matching
+# /turboquant/eval.py           @back2matching
+# /cuda/                        @back2matching
+# /benchmarks/                  @back2matching

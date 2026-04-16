@@ -41,6 +41,7 @@ Issues = "https://github.com/back2matching/turboquant/issues"
 
 [project.scripts]
 turboquant-server = "turboquant.server:main"
+turboquant-eval = "turboquant.eval:main"
 
 [tool.setuptools.packages.find]
 include = ["turboquant*"]

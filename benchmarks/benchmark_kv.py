@@ -45,12 +45,26 @@ class BenchmarkResult:
     generated_tokens: int
     vram_model_mb: float
     vram_peak_mb: float
-    vram_kv_estimate_mb: float
+    vram_kv_estimate_mb: float  # kept for backwards compat; prefer kv_vram_* below
     prefill_time_s: float
     generation_time_s: float
     tokens_per_sec: float
     output_text: str
     perplexity: Optional[float] = None
+    kv_vram_fp16_mb: Optional[float] = None        # reference FP16 KV cost
+    kv_vram_compressed_mb: Optional[float] = None  # actual quantized-buffer cost
+    kv_vram_savings_ratio: Optional[float] = None  # fp16 / compressed (1.00 for fp16 baseline)
+
+
+def fp16_kv_bytes_from_config(model, seq_len: int) -> int:
+    """Compute FP16 KV cache size from model config: L * 2 (K+V) * T * H * d * 2 bytes."""
+    cfg = model.config
+    num_layers = getattr(cfg, "num_hidden_layers", None) or getattr(cfg, "n_layer", 0)
+    num_kv_heads = getattr(cfg, "num_key_value_heads", None) or getattr(cfg, "num_attention_heads", 0)
+    hidden_size = getattr(cfg, "hidden_size", None) or getattr(cfg, "n_embd", 0)
+    num_heads = getattr(cfg, "num_attention_heads", num_kv_heads)
+    head_dim = hidden_size // num_heads if num_heads else 0
+    return num_layers * 2 * seq_len * num_kv_heads * head_dim * 2
 
 
 def benchmark_fp16(model, tokenizer, prompt: str, max_new_tokens: int, context_length: int) -> BenchmarkResult:
@@ -84,6 +98,8 @@ def benchmark_fp16(model, tokenizer, prompt: str, max_new_tokens: int, context_l
     output_text = tokenizer.decode(gen_outputs[0][input_len:], skip_special_tokens=True)
     gen_tokens = gen_outputs.shape[1] - input_len
 
+    fp16_kv_mb = fp16_kv_bytes_from_config(model, input_len + gen_tokens) / 1e6
+
     return BenchmarkResult(
         model=model.config._name_or_path,
         kv_mode="fp16",
@@ -96,6 +112,9 @@ def benchmark_fp16(model, tokenizer, prompt: str, max_new_tokens: int, context_l
         generation_time_s=t_gen,
         tokens_per_sec=gen_tokens / t_gen if t_gen > 0 else 0,
         output_text=output_text[:200],
+        kv_vram_fp16_mb=fp16_kv_mb,
+        kv_vram_compressed_mb=fp16_kv_mb,
+        kv_vram_savings_ratio=1.0,
     )
 
 
@@ -149,8 +168,11 @@ def benchmark_turboquant(model, tokenizer, prompt: str, max_new_tokens: int, con
     vram_peak = torch.cuda.max_memory_allocated() / 1024 / 1024 if torch.cuda.is_available() else 0
     output_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
 
-    # Get cache memory stats
+    # Get cache memory stats (exact, from TurboQuantCache tensor storage)
     mem_stats = cache.memory_usage_bytes() if hasattr(cache, 'memory_usage_bytes') else {}
+    kv_compressed_mb = mem_stats.get("total_bytes", 0) / 1e6 if mem_stats else None
+    kv_fp16_mb = mem_stats.get("fp16_equivalent_bytes", 0) / 1e6 if mem_stats else None
+    kv_savings = mem_stats.get("savings_ratio") if mem_stats else None
 
     return BenchmarkResult(
         model=model.config._name_or_path,
@@ -164,6 +186,9 @@ def benchmark_turboquant(model, tokenizer, prompt: str, max_new_tokens: int, con
         generation_time_s=t_gen,
         tokens_per_sec=len(generated_ids) / t_gen if t_gen > 0 else 0,
         output_text=output_text[:200],
+        kv_vram_fp16_mb=kv_fp16_mb,
+        kv_vram_compressed_mb=kv_compressed_mb,
+        kv_vram_savings_ratio=kv_savings,
     )
 
 
@@ -194,7 +219,10 @@ def run_single_context(model, tokenizer, context_length: int, max_tokens: int, r
         try:
             r = run_fn()
             results.append(r)
-            print(f"  VRAM peak: {r.vram_peak_mb:.0f} MB, KV est: {r.vram_kv_estimate_mb:.0f} MB")
+            kv_line = f"KV FP16: {r.kv_vram_fp16_mb:.1f} MB" if r.kv_vram_fp16_mb is not None else "KV FP16: -"
+            if r.kv_vram_compressed_mb is not None and r.kv_vram_savings_ratio is not None:
+                kv_line += f", KV TQ: {r.kv_vram_compressed_mb:.1f} MB ({r.kv_vram_savings_ratio:.2f}x)"
+            print(f"  VRAM peak: {r.vram_peak_mb:.0f} MB; {kv_line}")
             print(f"  Speed: {r.tokens_per_sec:.1f} tok/s, Prefill: {r.prefill_time_s:.3f}s")
             print(f"  Output: {r.output_text[:100]}...")
         except Exception as e:
@@ -245,12 +273,15 @@ def run_benchmarks(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct", quick: bool =
         json.dump(existing, f, indent=2)
     print(f"Combined results updated: {combined_path}")
 
-    # Summary table
-    print(f"\n{'='*80}")
-    print(f"{'Mode':<25} {'Context':<10} {'Peak VRAM':<12} {'KV Est':<10} {'Speed':<12} {'Prefill':<10}")
-    print(f"{'='*80}")
+    # Summary table — KV FP16 / KV TQ / Savings are the issue-#4 headline columns
+    print(f"\n{'='*100}")
+    print(f"{'Mode':<22} {'Context':<8} {'Peak VRAM':<11} {'KV FP16':<10} {'KV TQ':<9} {'Savings':<10} {'Speed':<11} {'Prefill':<8}")
+    print(f"{'='*100}")
     for r in results:
-        print(f"{r.kv_mode:<25} {r.context_length:<10} {r.vram_peak_mb:<12.0f} {r.vram_kv_estimate_mb:<10.0f} {r.tokens_per_sec:<12.1f} {r.prefill_time_s:<10.3f}")
+        fp16 = f"{r.kv_vram_fp16_mb:.1f}" if r.kv_vram_fp16_mb is not None else "-"
+        tq = f"{r.kv_vram_compressed_mb:.1f}" if r.kv_vram_compressed_mb is not None else "-"
+        savings = f"{r.kv_vram_savings_ratio:.2f}x" if r.kv_vram_savings_ratio is not None else "-"
+        print(f"{r.kv_mode:<22} {r.context_length:<8} {r.vram_peak_mb:<11.0f} {fp16:<10} {tq:<9} {savings:<10} {r.tokens_per_sec:<11.1f} {r.prefill_time_s:<8.3f}")
 
     return results
 

@@ -21,6 +21,8 @@ from scipy.special import betaincinv
 from typing import Optional, Tuple
 import math
 
+# NumPy 2.0+: trapz -> trapezoid; trapz removed in NumPy 2.x
+_np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
 def pack_uint4(indices: torch.Tensor) -> torch.Tensor:
     """Pack pairs of 4-bit indices into single uint8 bytes (nibble packing).
@@ -160,7 +162,8 @@ class TurboQuantMSE:
         x = np.linspace(a01, b01, n_points)
         pdf_vals = dist.pdf(x)
         # E[X] where X in [0,1], then map back to [-1,1]
-        expectation_01 = np.trapz(x * pdf_vals, x) / np.trapz(pdf_vals, x)
+        # fix numpy2.0 error
+        expectation_01 = _np_trapezoid(x * pdf_vals, x) / _np_trapezoid(pdf_vals, x)
         # Map from [0,1] to [-1,1]
         return float(2.0 * expectation_01 - 1.0)
 

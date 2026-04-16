@@ -34,6 +34,7 @@ _model = None
 _tokenizer = None
 _model_name = ""
 _tq_bits = 3
+_use_tq_cache = True  # False when --no-quant is set — uses stock DynamicCache for baseline
 _device = "cuda"
 
 
@@ -69,16 +70,20 @@ def load_model(model_name: str, quantize: Optional[str] = None):
 
 def generate_response(messages: list, max_tokens: int = 512, temperature: float = 0.7,
                        tools: Optional[list] = None, stream: bool = False) -> dict:
-    """Generate a chat completion with TurboQuant KV cache."""
-    global _model, _tokenizer, _tq_bits
+    """Generate a chat completion with TurboQuant KV cache (or stock DynamicCache in --no-quant mode)."""
+    global _model, _tokenizer, _tq_bits, _use_tq_cache
 
     # Build prompt from messages
     text = _tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=4096).to(_model.device)
     input_len = inputs["input_ids"].shape[1]
 
-    # Create TurboQuant cache
-    cache = TurboQuantCache(bits=_tq_bits)
+    # Create cache — TurboQuant compressed or stock FP16 baseline
+    if _use_tq_cache:
+        cache = TurboQuantCache(bits=_tq_bits)
+    else:
+        from transformers import DynamicCache
+        cache = DynamicCache()
 
     t0 = time.perf_counter()
 
@@ -141,7 +146,8 @@ def generate_response(messages: list, max_tokens: int = 512, temperature: float 
             "total_tokens": input_len + len(generated_ids),
         },
         "turboquant": {
-            "kv_bits": _tq_bits,
+            "mode": "turboquant" if _use_tq_cache else "baseline",
+            "kv_bits": _tq_bits if _use_tq_cache else None,
             "generation_time_s": round(duration, 3),
             "tokens_per_sec": round(len(generated_ids) / duration, 1) if duration > 0 else 0,
             "vram_mb": round(torch.cuda.memory_allocated() / 1024 / 1024) if torch.cuda.is_available() else 0,
@@ -182,7 +188,8 @@ class TurboQuantHandler(BaseHTTPRequestHandler):
             self._send_json({
                 "status": "ok",
                 "model": _model_name,
-                "kv_bits": _tq_bits,
+                "mode": "turboquant" if _use_tq_cache else "baseline",
+                "kv_bits": _tq_bits if _use_tq_cache else None,
                 **gpu_info,
             })
 
@@ -233,19 +240,23 @@ def main():
     parser.add_argument("--bits", type=int, default=4, help="TurboQuant KV cache bits (3 or 4)")
     parser.add_argument("--port", type=int, default=8000, help="Server port")
     parser.add_argument("--quantize", choices=["none", "int8", "int4"], default="none", help="Weight quantization")
+    parser.add_argument("--no-quant", action="store_true",
+                        help="Use stock HuggingFace DynamicCache instead of TurboQuantCache (FP16 baseline for benchmarking)")
     args = parser.parse_args()
 
-    global _tq_bits
+    global _tq_bits, _use_tq_cache
     _tq_bits = args.bits
+    _use_tq_cache = not args.no_quant
 
     # Load model
     load_model(args.model, quantize=args.quantize if args.quantize != "none" else None)
 
     # Start server
     server = HTTPServer(("0.0.0.0", args.port), TurboQuantHandler)
+    kv_desc = f"TurboQuant {args.bits}-bit" if _use_tq_cache else "FP16 baseline (stock DynamicCache)"
     print(f"\nTurboQuant Server running at http://localhost:{args.port}")
     print(f"  Model: {args.model}")
-    print(f"  KV cache: TurboQuant {args.bits}-bit")
+    print(f"  KV cache: {kv_desc}")
     print(f"  Endpoints:")
     print(f"    POST /v1/chat/completions  — OpenAI-compatible chat")
     print(f"    GET  /v1/models            — List models")

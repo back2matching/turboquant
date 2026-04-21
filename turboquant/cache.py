@@ -236,6 +236,29 @@ class TurboQuantCache(DynamicCache):
         keys, values = layer.update(key_states, value_states, cache_kwargs)
         return keys, values
 
+    def get_usable_length(self, max_length: int, layer_idx: Optional[int] = None) -> int:
+        """Return usable cache positions for the given layer (non-windowed: equals seq length)."""
+        return self.get_seq_length(layer_idx if layer_idx is not None else 0)
+
+    @property
+    def seen_tokens(self) -> int:
+        """Backward compatibility with model code written for transformers < 4.45.
+        In transformers ≥ 4.45, DynamicCache.seen_tokens was removed; models that
+        still access cache.seen_tokens (e.g. Phi-3.5-mini custom code) need this."""
+        if not self.layers:
+            return 0
+        return self.layers[0].get_seq_length()
+
+    @seen_tokens.setter
+    def seen_tokens(self, value: int) -> None:
+        """Silently accept writes for models that set seen_tokens directly."""
+        pass  # true value is derived from layers[0].get_seq_length()
+
+    def get_max_length(self) -> Optional[int]:
+        """Return maximum cache length. None = unlimited (no sliding-window cap).
+        Backward compatibility: transformers < 4.45 DynamicCache had this method."""
+        return None
+
     def memory_usage_bytes(self) -> dict:
         """Aggregate memory usage across all layers."""
         totals = {"compressed_bytes": 0, "residual_bytes": 0, "total_bytes": 0, "fp16_equivalent_bytes": 0}

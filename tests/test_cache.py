@@ -158,3 +158,49 @@ class TestTurboQuantCache:
         cache = TurboQuantCache(bits=3)
         assert cache.key_bits == 3
         assert cache.value_bits == 3
+
+
+class TestTransformersAPICompat:
+    """Backward-compat shims for pre-transformers-4.45 DynamicCache API.
+
+    Many published HuggingFace checkpoints still ship modeling_*.py files that
+    call cache.get_usable_length / cache.seen_tokens / cache.get_max_length.
+    TurboQuantCache must expose these even though upstream DynamicCache dropped them.
+    """
+
+    def test_seen_tokens_empty_cache(self, device):
+        cache = TurboQuantCache(bits=4)
+        assert cache.seen_tokens == 0
+
+    def test_seen_tokens_tracks_sequence_length(self, device):
+        cache = TurboQuantCache(bits=4)
+        k = torch.randn(1, 4, 50, 128, device=device, dtype=torch.float16)
+        v = torch.randn(1, 4, 50, 128, device=device, dtype=torch.float16)
+        cache.update(k, v, layer_idx=0)
+        assert cache.seen_tokens == 50
+
+    def test_seen_tokens_setter_is_silent(self, device):
+        """Older modeling code writes cache.seen_tokens = N; we accept and ignore."""
+        cache = TurboQuantCache(bits=4)
+        k = torch.randn(1, 4, 30, 128, device=device, dtype=torch.float16)
+        v = torch.randn(1, 4, 30, 128, device=device, dtype=torch.float16)
+        cache.update(k, v, layer_idx=0)
+        cache.seen_tokens = 999  # must not raise
+        assert cache.seen_tokens == 30  # true value still derived from layer
+
+    def test_get_usable_length_empty(self, device):
+        cache = TurboQuantCache(bits=4)
+        assert cache.get_usable_length(1024) == 0
+        assert cache.get_usable_length(1024, layer_idx=0) == 0
+
+    def test_get_usable_length_matches_seq_length(self, device):
+        cache = TurboQuantCache(bits=4)
+        k = torch.randn(1, 4, 40, 128, device=device, dtype=torch.float16)
+        v = torch.randn(1, 4, 40, 128, device=device, dtype=torch.float16)
+        cache.update(k, v, layer_idx=0)
+        assert cache.get_usable_length(1024, layer_idx=0) == 40
+        assert cache.get_usable_length(1024) == 40  # default layer_idx=0
+
+    def test_get_max_length_is_none(self, device):
+        """Non-windowed cache reports no cap."""
+        assert TurboQuantCache(bits=4).get_max_length() is None

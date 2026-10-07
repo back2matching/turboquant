@@ -1,12 +1,12 @@
 # TurboQuant
 
-**Your LLM runs 2x faster at long context.** When the KV cache fills your VRAM, everything grinds. TurboQuant compresses it — and the speed comes back.
+**Compress your LLM's KV cache. Save VRAM at long context.** Throughput depends on the model and workload: the recorded RTX 4080 benchmarks show gains in some memory-constrained workloads and slowdowns at shorter contexts.
 
 | | FP16 (baseline) | TurboQuant 4-bit |
 |---|---|---|
-| **Qwen 3B @ 4K context** | 2.5 tok/s (thrashing) | **7.4 tok/s** |
+| **Qwen 3B @ 4K context** | 2.5 tok/s | **7.4 tok/s** |
 | **VRAM saved** | — | **1 GB** |
-| **Qwen 7B @ 2K context** | 1.0 tok/s (OOM) | **1.4 tok/s** |
+| **Qwen 7B @ 2K context** | 1.0 tok/s | **1.4 tok/s** |
 
 Drop-in for any HuggingFace model:
 
@@ -136,7 +136,7 @@ At 7B with 1.8K context, FP16 exceeds physical VRAM (16,659 > 16,376 MB) and dro
 | 3720 | FP16 | 10,222 MB | -- | 2.5 |
 | 3720 | TQ 4-bit | 9,174 MB | **1,048 MB** | **7.4** |
 
-VRAM savings scale with context length: 51 MB at 512 tokens up to **1,048 MB at 4K tokens**. At 4K context, FP16 hits memory pressure (2.5 tok/s) while TQ-4bit with nibble packing runs at **7.4 tok/s — 196% faster**.
+VRAM savings scale with context length: 51 MB at 512 tokens up to **1,048 MB at 4K tokens**. At 3,720 input tokens (the 4K sweep setting), FP16 measured 2.477 tok/s and TQ-4bit measured 7.448 tok/s, **about 3.01x throughput in this workload**. These are recorded results, not a general speed guarantee. See [the per-model dataset](benchmarks/results_qwen2.5-3b-instruct.json).
 
 ### Qwen2.5-0.5B-Instruct — Long Context (942 MB model weights)
 
@@ -164,7 +164,7 @@ On StableLM, TQ uses **more** VRAM than FP16 at every context length. The Stable
 ### Key Takeaways
 
 - **VRAM savings scale linearly with context length.** At short contexts (<512 tokens), savings are minimal. At 4K tokens, savings exceed **1 GB**. At 8K, savings reach **2 GB**.
-- **Under memory pressure, TQ is significantly faster than FP16.** At 4K context on 3B, FP16 drops to 3.5 tok/s while TQ-4bit runs at 6.1 tok/s (74% faster). At 8K on 0.5B, TQ is 11% faster.
+- **Throughput varies by model and context.** The recorded 3B run at 3,720 input tokens measured 2.477 tok/s for FP16 and 7.448 tok/s for TQ-4bit (about 3.01x). The 0.5B run at 7,440 input tokens was 11% faster. At shorter contexts, TQ can be slower; for example, the 3B run at 460 tokens measured 14.6 tok/s for FP16 and 7.8 tok/s for TQ-4bit.
 - **v0.2.0 stores compressed indices.** Cache uses uint8 indices + float32 norms instead of dequantized FP16. Real compression with on-the-fly dequantization.
 - **Output quality is good at 4-bit on 3B+ models.** Qwen 3B and 7B produce coherent code. On 0.5B, TQ output sometimes degrades to filler repetition — small models are more sensitive to quantization noise.
 
